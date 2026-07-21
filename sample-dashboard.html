@@ -1,0 +1,949 @@
+<title>DDC Pipeline Console</title>
+
+<style>
+  * { box-sizing: border-box; }
+
+  /* Light is the default regardless of OS preference (owner ruling 2026-07-15,
+     reversing an earlier dark-default call the same day). prefers-color-scheme is
+     deliberately NOT consulted; dark is opt-in only, via the in-page Theme button
+     or the artifact viewer stamping data-theme. Base :root IS the light palette,
+     so [data-theme="light"] below is an exact mirror of it: that redundancy is
+     load-bearing, it lets the toggle switch back from dark. */
+  :root {
+    --ground: #EDF3FB;
+    --ground-2: #F7FAFE;
+    --surface: #FFFFFF;
+    --surface-2: #F2F7FD;
+    --line: #CBDCF0;
+    --ink: #032042;
+    --ink-mid: #3A5A85;
+    --ink-dim: #5D7CA6;
+    --cyan: #0077A8;
+    --ok: #2E9E1F;
+    --wait: #B37700;
+    --risk: #C0159F;
+
+    --c-ds: #2E9E1F;
+    --c-aemc: #1B7FD4;
+    --c-cicd: #5B48D6;
+    --c-cs: #B37700;
+
+    --shadow: 0 1px 2px rgba(3,32,66,.06), 0 6px 20px rgba(3,32,66,.10);
+
+    --sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+
+    /* Full-bleed by design: a capped width left ~400px of dead gutter on a wide
+       monitor. Prose blocks cap themselves at 68ch, so readability is unaffected. */
+    --pad: 2rem;
+  }
+
+  :root[data-theme="light"] {
+    --ground: #EDF3FB;
+    --ground-2: #F7FAFE;
+    --surface: #FFFFFF;
+    --surface-2: #F2F7FD;
+    --line: #CBDCF0;
+    --ink: #032042;
+    --ink-mid: #3A5A85;
+    --ink-dim: #5D7CA6;
+    --cyan: #0077A8;
+    --ok: #2E9E1F;
+    --wait: #B37700;
+    --risk: #C0159F;
+    --c-ds: #2E9E1F;
+    --c-aemc: #1B7FD4;
+    --c-cicd: #5B48D6;
+    --c-cs: #B37700;
+    --shadow: 0 1px 2px rgba(3,32,66,.06), 0 6px 20px rgba(3,32,66,.10);
+  }
+
+  :root[data-theme="dark"] {
+    --ground: #02162E;
+    --ground-2: #032042;
+    --surface: #07305F;
+    --surface-2: #0B3C74;
+    --line: #124A85;
+    --ink: #DCE9FA;
+    --ink-mid: #A8C0DE;
+    --ink-dim: #7C99C0;
+    --cyan: #00BDF4;
+    --ok: #63DF4E;
+    --wait: #FFBC39;
+    --risk: #FF53E4;
+    --c-ds: #63DF4E;
+    --c-aemc: #52B8FF;
+    --c-cicd: #8071F2;
+    --c-cs: #FFBC39;
+    --shadow: 0 1px 0 rgba(255,255,255,.04) inset, 0 8px 24px rgba(0,0,0,.32);
+  }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 17px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+  .eyebrow {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+    margin: 0;
+  }
+
+  /* ---------- top bar ---------- */
+
+  .topbar {
+    position: sticky; top: 0; z-index: 20;
+    background: color-mix(in srgb, var(--ground) 88%, transparent);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--line);
+  }
+  .topbar-in {
+    padding: .8rem var(--pad);
+    display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap;
+  }
+  .brand { display: flex; flex-direction: column; gap: .1rem; margin-right: auto; }
+  .brand-name { font-size: 1.05rem; font-weight: 700; letter-spacing: -.02em; }
+  .brand-sub { font-size: .74rem; color: var(--ink-dim); }
+
+  .countdown {
+    display: flex; align-items: baseline; gap: .45rem;
+    padding: .35rem .75rem;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+  }
+  .countdown-n { font-size: 1.5rem; font-weight: 700; color: var(--cyan); line-height: 1; }
+  .countdown-l { font-size: .72rem; color: var(--ink-dim); line-height: 1.25; }
+
+  nav.views { display: flex; gap: .25rem; background: var(--surface); border: 1px solid var(--line); border-radius: 9px; padding: .25rem; }
+  nav.views button {
+    font: inherit; font-size: .84rem; font-weight: 600;
+    color: var(--ink-mid); background: none; border: 0;
+    padding: .4rem .85rem; border-radius: 6px; cursor: pointer;
+    transition: background .15s, color .15s;
+  }
+  nav.views button:hover { color: var(--ink); background: var(--surface-2); }
+  nav.views button[aria-selected="true"] { background: var(--cyan); color: var(--ground); }
+  nav.views button[aria-selected="true"] { color: var(--ground); }
+
+  .theme-btn {
+    font: inherit; font-size: .78rem; color: var(--ink-mid);
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 8px; padding: .4rem .7rem; cursor: pointer;
+  }
+  .theme-btn:hover { color: var(--ink); }
+
+  :focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+
+  /* ---------- layout ---------- */
+
+  main { padding: 2rem var(--pad) 4rem; }
+  .view { display: none; }
+  .view.on { display: block; animation: fade .25s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .view.on { animation: none; } * { transition: none !important; } }
+
+  .view-head { margin-bottom: 1.75rem; }
+  .view-head h1 { font-size: 1.7rem; font-weight: 700; letter-spacing: -.025em; margin: .3rem 0 .4rem; text-wrap: balance; }
+  .view-head p { margin: 0; color: var(--ink-mid); font-size: .95rem; max-width: 68ch; }
+
+  h2.sec { font-size: 1.05rem; font-weight: 700; letter-spacing: -.015em; margin: 2.25rem 0 .9rem; }
+
+  /* ---------- process map ---------- */
+
+  .band { margin-bottom: 1.1rem; }
+  .band-head {
+    display: flex; align-items: center; gap: .6rem;
+    padding: 0 0 .5rem 0;
+  }
+  .band-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--bandc); flex: none; }
+  .band-name { font-size: .78rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--bandc); }
+  .band-meta { font-size: .74rem; color: var(--ink-dim); margin-left: auto; }
+
+  /* Flex rather than grid so a band's leftover last card (build has 6 phases,
+     review has 5) stretches to fill its row instead of stranding at 1/5 width.
+     align-items:flex-start so expanding one card does not stretch its row-mates. */
+  .nodes { display: flex; flex-wrap: wrap; gap: .6rem; align-items: flex-start; }
+
+  /* Each phase is a native <details>: collapsed shows the title only, click
+     toggles the skill/gate/notes. Native disclosure keeps it keyboard operable
+     and it still works with JS off. */
+  .node {
+    position: relative;
+    flex: 1 1 215px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--bandc);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+    transition: border-color .15s, background .15s;
+  }
+  .node:hover { background: var(--surface-2); }
+  .node[open] { border-color: color-mix(in srgb, var(--bandc) 55%, var(--line)); }
+
+  .node-top {
+    display: flex; align-items: center; gap: .5rem;
+    padding: .7rem .8rem;
+    cursor: pointer;
+    list-style: none;
+    border-radius: 5px;
+  }
+  .node-top::-webkit-details-marker { display: none; }
+  .node-top::marker { content: ""; }
+
+  .node-body {
+    padding: 0 .8rem .75rem;
+    display: flex; flex-direction: column; gap: .3rem;
+  }
+  .node[open] .node-body { animation: nodeIn .18s ease; }
+  @keyframes nodeIn { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .node[open] .node-body { animation: none; } }
+
+  .chev {
+    flex: none; width: 15px; height: 15px;
+    color: var(--ink-dim);
+    transition: transform .18s ease, color .15s;
+    font-family: var(--mono); font-size: .8rem; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .node[open] .chev { transform: rotate(45deg); color: var(--bandc); }
+  .node:hover .chev { color: var(--ink); }
+
+  .node-id {
+    font-family: var(--mono); font-size: .78rem; font-weight: 700;
+    color: var(--bandc);
+    background: color-mix(in srgb, var(--bandc) 15%, transparent);
+    border-radius: 4px; padding: .05rem .35rem; flex: none;
+  }
+  .node-name { font-size: .88rem; font-weight: 650; letter-spacing: -.01em; line-height: 1.3; flex: 1 1 auto; }
+  .node-top .tag { margin-left: 0; }
+  .node-skill { font-family: var(--mono); font-size: .7rem; color: var(--ink-dim); line-height: 1.4; word-break: break-word; }
+
+  /* Skill cards, nested one level inside a phase card. The description is read
+     from that skill's own SKILL.md frontmatter, so it says what the wiki card
+     says without depending on the wiki (which has no deep-link routing, and
+     whose output has been stale since 2026-07-13: LOOP-021). */
+  .skills { display: flex; flex-direction: column; gap: .25rem; }
+
+  .skill {
+    background: color-mix(in srgb, var(--bandc) 7%, transparent);
+    border: 1px solid color-mix(in srgb, var(--bandc) 22%, transparent);
+    border-radius: 5px;
+  }
+  .skill:hover { border-color: color-mix(in srgb, var(--bandc) 45%, transparent); }
+
+  .skill-n {
+    display: flex; align-items: center; gap: .4rem;
+    padding: .28rem .45rem;
+    font-family: var(--mono); font-size: .7rem; font-weight: 600;
+    color: var(--bandc);
+    cursor: pointer; list-style: none; word-break: break-word;
+  }
+  .skill-n::-webkit-details-marker { display: none; }
+  .skill-n::marker { content: ""; }
+
+  .skill-cat {
+    font-family: var(--sans); font-size: .58rem; font-weight: 700;
+    letter-spacing: .05em; text-transform: uppercase;
+    color: var(--wait);
+    background: color-mix(in srgb, var(--wait) 15%, transparent);
+    border-radius: 3px; padding: .05rem .3rem; flex: none;
+  }
+  /* Named by the pipeline doc but absent from this workspace's skill library. */
+  .skill-cat-missing {
+    color: var(--ink-dim);
+    background: color-mix(in srgb, var(--ink-dim) 14%, transparent);
+    margin-left: auto;
+  }
+
+  .skill-chev {
+    margin-left: auto; flex: none;
+    font-family: var(--mono); font-size: .7rem; font-weight: 700;
+    color: var(--ink-dim);
+    transition: transform .18s ease;
+  }
+  .skill[open] .skill-chev { transform: rotate(45deg); color: var(--bandc); }
+
+  .skill-d { padding: 0 .5rem .45rem; }
+  .skill-d p {
+    margin: 0 0 .35rem;
+    font-size: .72rem; line-height: 1.45; color: var(--ink-mid);
+  }
+  .skill-d code {
+    font-family: var(--mono); font-size: .62rem; color: var(--ink-dim);
+    word-break: break-all;
+  }
+  @media (prefers-reduced-motion: reduce) { .skill-chev { transition: none; } }
+  .node-gate { font-size: .74rem; color: var(--ink-mid); line-height: 1.35; }
+  .node-gate b { color: var(--ink); font-weight: 600; }
+  .node-note {
+    font-size: .72rem; color: var(--ink-mid); line-height: 1.35;
+    border-top: 1px dashed var(--line); padding-top: .35rem; margin-top: .1rem;
+  }
+
+  .tag {
+    display: inline-flex; align-items: center; gap: .3rem;
+    font-size: .66rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+    border-radius: 4px; padding: .1rem .35rem; margin-left: auto; flex: none;
+  }
+  .tag-ext { color: var(--wait); border: 1px dashed var(--wait); }
+  .tag-human { color: var(--ink-dim); border: 1px solid var(--line); }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 1.1rem; padding: .85rem 1rem; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; margin-bottom: 1.75rem; }
+  .legend-i { display: flex; align-items: center; gap: .45rem; font-size: .78rem; color: var(--ink-mid); }
+
+  /* ---------- kpi strip ---------- */
+
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: .75rem; margin-bottom: 1.75rem; }
+  .kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 9px; padding: .9rem 1rem; box-shadow: var(--shadow); }
+  .kpi-n { font-size: 1.9rem; font-weight: 700; line-height: 1.05; letter-spacing: -.03em; }
+  .kpi-l { font-size: .74rem; color: var(--ink-dim); margin-top: .2rem; }
+  .kpi-sub { font-size: .7rem; color: var(--ink-mid); margin-top: .3rem; }
+
+  /* ---------- course jump bar ---------- */
+
+  /* Sits above the view heading: it is the first thing read on the page. */
+  .jump {
+    display: flex; flex-wrap: wrap; gap: .5rem;
+    margin-bottom: 1.5rem;
+  }
+  .jump-i {
+    display: flex; align-items: center; gap: .5rem;
+    padding: .45rem .7rem;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--cc);
+    border-radius: 7px;
+    text-decoration: none;
+    box-shadow: var(--shadow);
+    transition: transform .12s ease, border-color .12s ease;
+  }
+  .jump-i:hover { transform: translateY(-1px); border-color: var(--cc); border-left-color: var(--cc); }
+  .jump-n { font-size: .84rem; font-weight: 700; color: var(--ink); letter-spacing: -.01em; }
+  .jump-p {
+    font-family: var(--mono); font-variant-numeric: tabular-nums;
+    font-size: .84rem; font-weight: 700; color: var(--cc);
+  }
+  .jump-s {
+    font-size: .66rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+    border-radius: 4px; padding: .1rem .35rem;
+  }
+  /* Semantic status, deliberately independent of the course accent hue. */
+  .jump-act  { color: var(--ok);      background: color-mix(in srgb, var(--ok) 14%, transparent); }
+  .jump-wait { color: var(--wait);    background: color-mix(in srgb, var(--wait) 16%, transparent); }
+  .jump-done { color: var(--ink-dim); background: color-mix(in srgb, var(--ink-dim) 14%, transparent); }
+
+  /* ---------- course cards ---------- */
+
+  .courses { display: flex; flex-direction: column; gap: 1rem; }
+
+  .course {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-top: 3px solid var(--cc);
+    border-radius: 10px;
+    padding: 1.1rem 1.2rem 1.2rem;
+    box-shadow: var(--shadow);
+    /* Clears the sticky header when jumped to from the bar above. */
+    scroll-margin-top: 90px;
+  }
+  /* Flags where you landed after a jump. Pure CSS, no JS needed. */
+  .course:target {
+    border-color: var(--cc);
+    box-shadow: var(--shadow), 0 0 0 3px color-mix(in srgb, var(--cc) 30%, transparent);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    html { scroll-behavior: smooth; }
+  }
+  .course-head { display: flex; align-items: flex-start; gap: 1.1rem; flex-wrap: wrap; }
+  .donut { flex: none; }
+  .donut-wrap { position: relative; width: 92px; height: 92px; flex: none; }
+  .donut-txt {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 0;
+  }
+  .donut-pct { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 1.25rem; font-weight: 700; color: var(--cc); line-height: 1; }
+  .donut-cap { font-size: .58rem; color: var(--ink-dim); letter-spacing: .06em; text-transform: uppercase; margin-top: .15rem; }
+
+  .course-id { flex: 1 1 260px; min-width: 0; }
+  .course-name { font-size: 1.2rem; font-weight: 700; letter-spacing: -.02em; margin: 0 0 .25rem; }
+  .course-phase { font-size: .84rem; color: var(--ink-mid); line-height: 1.4; }
+  .course-phase b { color: var(--cc); font-weight: 700; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .55rem; }
+  .chip {
+    display: inline-flex; align-items: center; gap: .35rem;
+    font-size: .72rem; font-weight: 600;
+    border: 1px solid var(--line); border-radius: 5px;
+    padding: .2rem .5rem; color: var(--ink-mid);
+    background: var(--surface-2);
+  }
+  .chip .num { font-weight: 700; color: var(--ink); }
+  .chip-ok    { color: var(--ok);   border-color: color-mix(in srgb, var(--ok) 50%, var(--line)); }
+  .chip-wait  { color: var(--wait); border-color: color-mix(in srgb, var(--wait) 50%, var(--line)); }
+  .chip-risk  { color: var(--risk); border-color: color-mix(in srgb, var(--risk) 55%, var(--line)); }
+  .chip-glyph { font-family: var(--mono); font-weight: 700; }
+
+  /* station rail */
+  .rail-wrap { margin-top: 1rem; }
+  .rail { display: flex; gap: 2px; align-items: flex-end; height: 26px; }
+  .seg {
+    flex: 1 1 0; height: 9px; border-radius: 2px;
+    background: var(--surface-2); border: 1px solid var(--line);
+    position: relative;
+  }
+  .seg.done { background: var(--cc); border-color: var(--cc); opacity: .55; }
+  .seg.now  { height: 24px; background: var(--cc); border-color: var(--cc); opacity: 1; box-shadow: 0 0 0 3px color-mix(in srgb, var(--cc) 22%, transparent); }
+  .seg.ext  { border-style: dashed; border-color: var(--wait); }
+  .seg.ext.done { background: color-mix(in srgb, var(--wait) 45%, var(--surface-2)); }
+  .rail-axis { display: flex; gap: 2px; margin-top: .3rem; }
+  .rail-axis span { flex: 1 1 0; text-align: center; font-family: var(--mono); font-size: .56rem; color: var(--ink-dim); }
+  .rail-cap { display: flex; justify-content: space-between; font-size: .68rem; color: var(--ink-dim); margin-top: .35rem; }
+
+  .blocker {
+    margin-top: .9rem; padding: .6rem .75rem;
+    border-radius: 6px; font-size: .8rem; line-height: 1.45;
+    background: color-mix(in srgb, var(--bl) 10%, transparent);
+    border-left: 3px solid var(--bl);
+    color: var(--ink-mid);
+  }
+  .blocker b { color: var(--bl); font-weight: 700; }
+  /* Provenance line: answers "where did this come from" without leading with the ID. */
+  .prov {
+    display: block; margin-top: .4rem;
+    font-size: .68rem; color: var(--ink-dim);
+  }
+  .prov code { font-family: var(--mono); font-size: .95em; }
+
+  .remaining { margin: .9rem 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: .3rem; }
+  .remaining li { display: flex; gap: .55rem; font-size: .8rem; color: var(--ink-mid); line-height: 1.45; }
+  .remaining .rtype {
+    font-family: var(--mono); font-size: .62rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .05em;
+    border: 1px solid var(--line); border-radius: 3px;
+    padding: .05rem .3rem; height: fit-content; margin-top: .1rem; flex: none;
+    color: var(--ink-dim);
+  }
+  .remaining .rtype.queue { color: var(--wait); border-color: color-mix(in srgb, var(--wait) 45%, var(--line)); }
+  .remaining .rhrs { margin-left: auto; flex: none; font-family: var(--mono); font-size: .72rem; color: var(--ink-dim); }
+
+  .drift {
+    margin-top: .9rem; padding: .6rem .75rem;
+    border: 1px dashed var(--risk); border-radius: 6px;
+    font-size: .78rem; line-height: 1.45; color: var(--ink-mid);
+  }
+  .drift b { color: var(--risk); }
+
+  /* ---------- capacity ---------- */
+
+  .cap-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; }
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 1.1rem 1.2rem; box-shadow: var(--shadow); }
+  .panel h3 { font-size: .95rem; font-weight: 700; margin: 0 0 .2rem; letter-spacing: -.015em; }
+  .panel .hint { font-size: .76rem; color: var(--ink-dim); margin: 0 0 .9rem; line-height: 1.4; }
+
+  .bar-row { margin-bottom: .8rem; }
+  .bar-lab { display: flex; justify-content: space-between; font-size: .78rem; margin-bottom: .25rem; }
+  .bar-lab .l { color: var(--ink-mid); }
+  .bar-lab .v { font-family: var(--mono); color: var(--ink); font-weight: 600; }
+  .bar { height: 10px; border-radius: 3px; background: var(--surface-2); border: 1px solid var(--line); overflow: hidden; display: flex; }
+  .bar-fill { height: 100%; background: var(--bc); }
+  .bar-fill.range { background: repeating-linear-gradient(45deg, var(--bc), var(--bc) 4px, color-mix(in srgb, var(--bc) 40%, transparent) 4px, color-mix(in srgb, var(--bc) 40%, transparent) 8px); }
+
+  .verdict {
+    padding: .8rem 1rem; border-radius: 8px; font-size: .88rem; line-height: 1.5;
+    background: color-mix(in srgb, var(--ok) 12%, transparent);
+    border-left: 3px solid var(--ok);
+    color: var(--ink-mid);
+  }
+  .verdict b { color: var(--ok); }
+  .verdict.warn { background: color-mix(in srgb, var(--wait) 12%, transparent); border-left-color: var(--wait); }
+  .verdict.warn b { color: var(--wait); }
+
+  .tl { display: flex; flex-direction: column; gap: .55rem; }
+  .tl-row { display: flex; align-items: center; gap: .7rem; }
+  .tl-name { width: 130px; flex: none; font-size: .8rem; font-weight: 600; color: var(--ink); }
+  .tl-track { flex: 1; height: 22px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 4px; position: relative; overflow: hidden; }
+  .tl-seg {
+    position: absolute; top: 0; bottom: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: .6rem; font-family: var(--mono); font-weight: 700;
+    white-space: nowrap; overflow: hidden;
+    /* Separates adjacent segments. Earlier this job was done by varying each
+       segment's tint, which read as an encoding but meant nothing. A divider
+       is honest: it carries no meaning and does not pretend to. */
+    border-right: 2px solid var(--surface);
+  }
+  .tl-track .tl-seg:last-child { border-right: 0; }
+  /* Solid course hue = the course's own effort. --ground inverts per theme. */
+  .tl-seg.own { color: var(--ground); }
+  /* External-queue segments: two-tone amber rather than amber-on-transparent, so
+     the label still reads. Text uses --ground, which inverts correctly per theme. */
+  .tl-seg.ext {
+    background: repeating-linear-gradient(45deg,
+      var(--wait), var(--wait) 5px,
+      color-mix(in srgb, var(--wait) 55%, var(--ground)) 5px,
+      color-mix(in srgb, var(--wait) 55%, var(--ground)) 10px);
+    color: var(--ground);
+  }
+  .tl-seg.idle {
+    background: repeating-linear-gradient(45deg, var(--line), var(--line) 4px, transparent 4px, transparent 8px);
+    color: var(--ink-dim);
+  }
+  .tl-key {
+    display: flex; flex-wrap: wrap; gap: .5rem 1.25rem;
+    margin: -.4rem 0 1rem;
+  }
+  .tl-key-i { display: flex; align-items: center; gap: .4rem; font-size: .76rem; color: var(--ink-mid); }
+  /* Lift the lead phrase off the dimmer clarifier text so the bold actually reads as bold. */
+  .tl-key-i b { color: var(--ink); font-weight: 650; }
+  .sw { width: 22px; height: 11px; border-radius: 3px; flex: none; border: 1px solid var(--line); }
+  .sw-own  { background: var(--c-cicd); border-color: var(--c-cicd); }
+  .sw-ext  {
+    background: repeating-linear-gradient(45deg,
+      var(--wait), var(--wait) 4px,
+      color-mix(in srgb, var(--wait) 55%, var(--ground)) 4px,
+      color-mix(in srgb, var(--wait) 55%, var(--ground)) 8px);
+    border-color: var(--wait);
+  }
+  .sw-idle { background: repeating-linear-gradient(45deg, var(--line), var(--line) 3px, transparent 3px, transparent 6px); }
+  .sw-hue  { background: linear-gradient(90deg, var(--c-cicd) 0 25%, var(--c-ds) 25% 50%, var(--c-cs) 50% 75%, var(--c-aemc) 75% 100%); border-color: var(--line); }
+
+  .tl-scale { display: flex; margin-left: 137px; margin-top: .3rem; }
+  .tl-scale span { flex: 1; font-family: var(--mono); font-size: .6rem; color: var(--ink-dim); }
+  .tl-scale span:last-child { text-align: right; }
+
+  .waiting { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .55rem; }
+  .waiting li { display: flex; gap: .7rem; align-items: flex-start; font-size: .82rem; color: var(--ink-mid); line-height: 1.45; }
+  .waiting .wdate { font-family: var(--mono); font-size: .7rem; font-weight: 700; color: var(--wait); border: 1px solid color-mix(in srgb, var(--wait) 45%, var(--line)); border-radius: 4px; padding: .1rem .35rem; flex: none; margin-top: .1rem; }
+  .waiting .wdate.dec { color: var(--cyan); border-color: color-mix(in srgb, var(--cyan) 45%, var(--line)); }
+  .waiting b { color: var(--ink); font-weight: 650; }
+
+  .footnote { margin-top: 2.5rem; padding-top: 1rem; border-top: 1px solid var(--line); font-size: .74rem; color: var(--ink-dim); line-height: 1.55; }
+  .footnote code { font-family: var(--mono); font-size: .95em; color: var(--ink-mid); }
+
+  table.src { width: 100%; border-collapse: collapse; font-size: .78rem; margin-top: .5rem; }
+  table.src th, table.src td { text-align: left; padding: .35rem .6rem .35rem 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table.src th { color: var(--ink-dim); font-weight: 600; font-size: .7rem; text-transform: uppercase; letter-spacing: .08em; }
+  table.src td { color: var(--ink-mid); }
+  table.src code { font-family: var(--mono); color: var(--cyan); font-size: .95em; }
+
+  .scroll-x { overflow-x: auto; }
+
+  /* ---------- station tooltip ---------- */
+  .seg { cursor: help; }
+  .tip {
+    position: fixed; z-index: 60; pointer-events: none;
+    background: var(--ground-2);
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    padding: .5rem .6rem;
+    box-shadow: 0 8px 24px rgba(0,0,0,.28);
+    max-width: 280px;
+    animation: tipIn .12s ease;
+  }
+  @media (prefers-reduced-motion: reduce) { .tip { animation: none; } }
+  @keyframes tipIn { from { opacity: 0; } to { opacity: 1; } }
+  .tip-h { display: flex; align-items: baseline; gap: .4rem; margin-bottom: .2rem; }
+  .tip-id {
+    font-family: var(--mono); font-size: .7rem; font-weight: 700;
+    color: var(--cyan); flex: none;
+  }
+  .tip-name { font-size: .82rem; font-weight: 650; color: var(--ink); line-height: 1.25; }
+  .tip-m { font-size: .7rem; color: var(--ink-dim); }
+  .tip-s { font-size: .72rem; font-weight: 600; margin-top: .25rem; }
+  .tip-done { color: var(--ok); }
+  .tip-now  { color: var(--cyan); }
+  .tip-todo { color: var(--ink-dim); }
+
+  @media (max-width: 700px) {
+    .topbar-in { gap: .75rem; }
+    .brand { margin-right: 0; flex: 1 1 100%; }
+    .tl-name { width: 88px; }
+    .tl-scale { margin-left: 95px; }
+    body { font-size: 16px; }
+  }
+</style>
+
+<div class="tip" id="tip" role="tooltip" hidden></div>
+
+<header class="topbar">
+  <div class="topbar-in">
+    <div class="brand">
+      <span class="brand-name">DDC Pipeline Console</span>
+      <span class="brand-sub">6 courses &middot; data as of 2026-07-20</span>
+    </div>
+    <div class="countdown"><span class="countdown-n num" id="cd-days">87</span><span class="countdown-l">days to GA<br>2026-10-15</span></div>
+    <nav class="views" role="tablist" aria-label="Dashboard views">
+      <button role="tab" aria-selected="true" aria-controls="view-courses" id="tab-courses">Course tracker</button><button role="tab" aria-selected="false" aria-controls="view-capacity" id="tab-capacity">Capacity</button><button role="tab" aria-selected="false" aria-controls="view-process" id="tab-process">Process map</button>
+    </nav>
+    <button class="theme-btn" id="theme-btn" aria-label="Toggle light and dark theme">Theme</button>
+  </div>
+</header>
+
+<main>
+
+  <!-- ==================== VIEW 1: COURSE TRACKER (default) ==================== -->
+  <section class="view on" id="view-courses" role="tabpanel" aria-labelledby="tab-courses">
+    <div class="jump"><a class="jump-i" href="#c-onboarding-essentials" style="--cc:#8071F2"><span class="jump-n">Onboarding Esse.</span><span class="jump-p">97%</span><span class="jump-s jump-act">Action needed</span></a><a class="jump-i" href="#c-reporting-and-dashboards" style="--cc:#63DF4E"><span class="jump-n">Reporting And D.</span><span class="jump-p">50%</span><span class="jump-s jump-act">Action needed</span></a><a class="jump-i" href="#c-service-catalog-design" style="--cc:#FFBC39"><span class="jump-n">Service Catalog.</span><span class="jump-p">68%</span><span class="jump-s jump-act">Action needed</span></a><a class="jump-i" href="#c-integration-basics" style="--cc:#52B8FF"><span class="jump-n">Integration Bas.</span><span class="jump-p">15%</span><span class="jump-s jump-act">Action needed</span></a><a class="jump-i" href="#c-platform-fundamentals" style="--cc:#00BDF4"><span class="jump-n">Platform Fundam.</span><span class="jump-p">91%</span><span class="jump-s jump-wait">Waiting</span></a><a class="jump-i" href="#c-workflow-automation" style="--cc:#FF53E4"><span class="jump-n">Workflow Automa.</span><span class="jump-p">79%</span><span class="jump-s jump-wait">Waiting</span></a></div>
+    <div class="view-head">
+      <p class="eyebrow">Where the work is</p>
+      <h1>6 courses, one deadline</h1>
+      <p>Where each course sits in the pipeline, what is left, and what is holding it. Every number is read from the source files when this page is built, then cross-checked; nothing here is typed by hand.</p>
+    </div>
+    <div class="kpis"><div class="kpi"><div class="kpi-n num" style="color:var(--cyan)">87</div><div class="kpi-l">days to GA</div><div class="kpi-sub">2026-10-15, hard deadline</div></div><div class="kpi"><div class="kpi-n num">48-87</div><div class="kpi-l">hours of work left</div><div class="kpi-sub">across all 6 courses</div></div><div class="kpi"><div class="kpi-n num" style="color:var(--wait)">2</div><div class="kpi-l">paused, nothing to do</div><div class="kpi-sub">Platform Fundam., Workflow Automa.</div></div><div class="kpi"><div class="kpi-n num" style="color:var(--ok)">4</div><div class="kpi-l">actionable now</div><div class="kpi-sub">Onboarding Esse., Reporting And D., Service Catalog., Integration Bas.</div></div></div>
+    <div class="courses">
+      <article class="course" id="c-onboarding-essentials" style="--cc:#8071F2">
+        <div class="course-head">
+          <div class="donut-wrap">
+            <svg class="donut" width="92" height="92" viewBox="0 0 92 92" aria-hidden="true">
+              <circle cx="46" cy="46" r="39" fill="none" stroke="var(--surface-2)" stroke-width="9"/>
+              <circle cx="46" cy="46" r="39" fill="none" stroke="var(--cc)" stroke-width="9"
+                      stroke-linecap="round" stroke-dasharray="245.04" stroke-dashoffset="7.35"
+                      transform="rotate(-90 46 46)"/>
+            </svg>
+            <div class="donut-txt"><span class="donut-pct">97%</span><span class="donut-cap">checklist</span></div>
+          </div>
+          <div class="course-id">
+            <h2 class="course-name">Onboarding Essentials</h2>
+            <div class="course-phase">Station <b>15 of 17</b> &middot; Export + publish to SNU &middot; <span style="color:var(--ink-dim)">stage 5, publish</span></div>
+            <div class="chips"><span class="chip chip-ok"><span class="chip-glyph">&#9679;</span> Action needed</span><span class="chip">rank <span class="num">1</span></span><span class="chip">left <span class="num">1-2h</span></span></div>
+          </div>
+        </div>
+        <div class="rail-wrap">
+          <div class="rail" id="rail-onboarding-essentials"></div>
+          <div class="rail-cap"><span>0 Assignment triage</span><span>15 Export + publish to SNU</span></div>
+        </div>
+        
+        <ul class="remaining"><li><span class="rtype ">build</span> Publish to the LXP<span class="rhrs">1-2h</span></li></ul>
+      </article>
+      <article class="course" id="c-reporting-and-dashboards" style="--cc:#63DF4E">
+        <div class="course-head">
+          <div class="donut-wrap">
+            <svg class="donut" width="92" height="92" viewBox="0 0 92 92" aria-hidden="true">
+              <circle cx="46" cy="46" r="39" fill="none" stroke="var(--surface-2)" stroke-width="9"/>
+              <circle cx="46" cy="46" r="39" fill="none" stroke="var(--cc)" stroke-width="9"
+                      stroke-linecap="round" stroke-dasharray="245.04" stroke-dashoffset="122.52"
+                      transform="rotate(-90 46 46)"/>
+            </svg>
+            <div class="donut-txt"><span class="donut-pct">50%</span><span class="donut-cap">checklist</span></div>
+          </div>
+          <div class="course-id">
+            <h2 class="course-name">Reporting And Dashboards</h2>
+            <div class="course-phase">Station <b>8 of 17</b> &middot; CLabs step testing + screenshots &middot; <span style="color:var(--ink-dim)">stage 3, build</span></div>
+            <div class="chips"><span class="chip chip-ok"><span class="chip-glyph">&#9679;</span> Action needed</span><span class="chip">rank <span class="num">2</span></span><span class="chip">left <span class="num">14-24h</span></span><span class="chip chip-risk"><span class="chip-glyph">?</span> Needs your answer</span></div>
+          </div>
+        </div>
+        <div class="rail-wrap">
+          <div class="rail" id="rail-reporting-and-dashboards"></div>
+          <div class="rail-cap"><span>0 Assignment triage</span><span>15 Export + publish to SNU</span></div>
+        </div>
+        <div class="blocker" style="--bl:var(--risk)"><b>Waiting on your answer.</b> Do we keep the full build, or switch to modify-an-existing? It blocks the next 14 to 24 hours of work.<span class="prov">Source: COMMAND-CENTER.md decisions list, DEC-002</span></div>
+        <ul class="remaining"><li><span class="rtype ">build</span> Lab screenshots<span class="rhrs">6-10h</span></li><li><span class="rtype ">build</span> Visual assets<span class="rhrs">3-5h</span></li><li><span class="rtype ">build</span> Rise build<span class="rhrs">4-7h</span></li><li><span class="rtype ">check</span> QA chain<span class="rhrs">1-2h</span></li></ul>
+      </article>
+      <article class="course" id="c-service-catalog-design" style="--cc:#FFBC39">
+        <div class="course-head">
+          <div class="donut-wrap">
+            <svg class="donut" width="92" height="92" viewBox="0 0 92 92" aria-hidden="true">
+              <circle cx="46" cy="46" r="39" fill="none" stroke="var(--surface-2)" stroke-width="9"/>
+              <circle cx="46" cy="46" r="39" fill="none" stroke="var(--cc)" stroke-width="9"
+                      stroke-linecap="round" stroke-dasharray="245.04" stroke-dashoffset="78.41"
+                      transform="rotate(-90 46 46)"/>
+            </svg>
+            <div class="donut-txt"><span class="donut-pct">68%</span><span class="donut-cap">checklist</span></div>
+          </div>
+          <div class="course-id">
+            <h2 class="course-name">Service Catalog Design</h2>
+            <div class="course-phase">Station <b>11 of 17</b> &middot; QA, alt text, borders, links &middot; <span style="color:var(--ink-dim)">stage 4, review</span></div>
+            <div class="chips"><span class="chip chip-ok"><span class="chip-glyph">&#9679;</span> Action needed</span><span class="chip">rank <span class="num">3</span></span><span class="chip">left <span class="num">6-11h</span></span></div>
+          </div>
+        </div>
+        <div class="rail-wrap">
+          <div class="rail" id="rail-service-catalog-design"></div>
+          <div class="rail-cap"><span>0 Assignment triage</span><span>15 Export + publish to SNU</span></div>
+        </div>
+        
+        <ul class="remaining"><li><span class="rtype ">build</span> Finish QA chain<span class="rhrs">3-5h</span></li><li><span class="rtype ">build</span> Alpha review<span class="rhrs">2-4h</span></li><li><span class="rtype queue">queue</span> SME review<span class="rhrs">5-10d</span></li><li><span class="rtype ">build</span> Branding and publish<span class="rhrs">1-2h</span></li></ul>
+      </article>
+      <article class="course" id="c-integration-basics" style="--cc:#52B8FF">
+        <div class="course-head">
+          <div class="donut-wrap">
+            <svg class="donut" width="92" height="92" viewBox="0 0 92 92" aria-hidden="true">
+              <circle cx="46" cy="46" r="39" fill="none" stroke="var(--surface-2)" stroke-width="9"/>
+              <circle cx="46" cy="46" r="39" fill="none" stroke="var(--cc)" stroke-width="9"
+                      stroke-linecap="round" stroke-dasharray="245.04" stroke-dashoffset="208.29"
+                      transform="rotate(-90 46 46)"/>
+            </svg>
+            <div class="donut-txt"><span class="donut-pct">15%</span><span class="donut-cap">checklist</span></div>
+          </div>
+          <div class="course-id">
+            <h2 class="course-name">Integration Basics</h2>
+            <div class="course-phase">Station <b>2 of 17</b> &middot; Blueprint / PRD &middot; <span style="color:var(--ink-dim)">stage 2, plan</span></div>
+            <div class="chips"><span class="chip chip-ok"><span class="chip-glyph">&#9679;</span> Action needed</span><span class="chip">rank <span class="num">4</span></span><span class="chip">left <span class="num">22-38h</span></span><span class="chip chip-risk"><span class="chip-glyph">?</span> Needs your answer</span></div>
+          </div>
+        </div>
+        <div class="rail-wrap">
+          <div class="rail" id="rail-integration-basics"></div>
+          <div class="rail-cap"><span>0 Assignment triage</span><span>15 Export + publish to SNU</span></div>
+        </div>
+        <div class="blocker" style="--bl:var(--risk)"><b>Waiting on your answer.</b> Do we keep this as one nine-lesson course, or split it into two? It blocks the next 22 to 38 hours of work.<span class="prov">Source: COMMAND-CENTER.md decisions list, DEC-001</span></div>
+        <ul class="remaining"><li><span class="rtype ">build</span> Outline and plan<span class="rhrs">4-6h</span></li><li><span class="rtype ">build</span> Lesson and lab specs<span class="rhrs">10-16h</span></li><li><span class="rtype queue">queue</span> Cloud Labs instance<span class="rhrs">2-4d</span></li><li><span class="rtype ">build</span> Rise build<span class="rhrs">8-16h</span></li></ul>
+      </article>
+      <article class="course" id="c-platform-fundamentals" style="--cc:#00BDF4">
+        <div class="course-head">
+          <div class="donut-wrap">
+            <svg class="donut" width="92" height="92" viewBox="0 0 92 92" aria-hidden="true">
+              <circle cx="46" cy="46" r="39" fill="none" stroke="var(--surface-2)" stroke-width="9"/>
+              <circle cx="46" cy="46" r="39" fill="none" stroke="var(--cc)" stroke-width="9"
+                      stroke-linecap="round" stroke-dasharray="245.04" stroke-dashoffset="22.05"
+                      transform="rotate(-90 46 46)"/>
+            </svg>
+            <div class="donut-txt"><span class="donut-pct">91%</span><span class="donut-cap">checklist</span></div>
+          </div>
+          <div class="course-id">
+            <h2 class="course-name">Platform Fundamentals</h2>
+            <div class="course-phase">Station <b>14.5 of 17</b> &middot; Formal SNU QA review &middot; <span style="color:var(--ink-dim)">stage 4, review</span></div>
+            <div class="chips"><span class="chip chip-wait"><span class="chip-glyph">&#9651;</span> Waiting</span><span class="chip">rank <span class="num">5</span></span><span class="chip">left <span class="num">2-5h</span></span></div>
+          </div>
+        </div>
+        <div class="rail-wrap">
+          <div class="rail" id="rail-platform-fundamentals"></div>
+          <div class="rail-cap"><span>0 Assignment triage</span><span>15 Export + publish to SNU</span></div>
+        </div>
+        <div class="blocker" style="--bl:var(--wait)"><b>External clock, closes 2026-07-31.</b> QA review target turnaround<span class="prov">Source: COMMAND-CENTER.md external_clocks</span></div>
+        <ul class="remaining"><li><span class="rtype queue">queue</span> Formal QA review<span class="rhrs">3-8d</span></li><li><span class="rtype ">build</span> Resolve QA findings<span class="rhrs">2-4h</span></li><li><span class="rtype ">build</span> Publish to the LXP<span class="rhrs">1h</span></li></ul>
+      </article>
+      <article class="course" id="c-workflow-automation" style="--cc:#FF53E4">
+        <div class="course-head">
+          <div class="donut-wrap">
+            <svg class="donut" width="92" height="92" viewBox="0 0 92 92" aria-hidden="true">
+              <circle cx="46" cy="46" r="39" fill="none" stroke="var(--surface-2)" stroke-width="9"/>
+              <circle cx="46" cy="46" r="39" fill="none" stroke="var(--cc)" stroke-width="9"
+                      stroke-linecap="round" stroke-dasharray="245.04" stroke-dashoffset="51.46"
+                      transform="rotate(-90 46 46)"/>
+            </svg>
+            <div class="donut-txt"><span class="donut-pct">79%</span><span class="donut-cap">checklist</span></div>
+          </div>
+          <div class="course-id">
+            <h2 class="course-name">Workflow Automation</h2>
+            <div class="course-phase">Station <b>13 of 17</b> &middot; SME review &middot; <span style="color:var(--ink-dim)">stage 4, review</span></div>
+            <div class="chips"><span class="chip chip-wait"><span class="chip-glyph">&#9651;</span> Waiting</span><span class="chip">rank <span class="num">6</span></span><span class="chip">left <span class="num">3-7h</span></span></div>
+          </div>
+        </div>
+        <div class="rail-wrap">
+          <div class="rail" id="rail-workflow-automation"></div>
+          <div class="rail-cap"><span>0 Assignment triage</span><span>15 Export + publish to SNU</span></div>
+        </div>
+        <div class="blocker" style="--bl:var(--wait)"><b>External clock, closes 2026-08-07.</b> SME feedback window closes<span class="prov">Source: COMMAND-CENTER.md external_clocks</span></div>
+        <ul class="remaining"><li><span class="rtype queue">queue</span> SME review window<span class="rhrs">5-10d</span></li><li><span class="rtype ">build</span> Triage and apply feedback<span class="rhrs">2-5h</span></li><li><span class="rtype ">build</span> Branding pass<span class="rhrs">1-2h</span></li><li><span class="rtype queue">queue</span> Formal QA review<span class="rhrs">3-8d</span></li></ul>
+      </article>
+    </div>
+    <div class="footnote">
+      Station and remaining work read from <code>COMMAND-CENTER.md</code>. Checklist percentage computed by
+      <code>.claude/skills/gld-project-percent-complete/scripts/compute_percent_complete.py</code> against each course's
+      own STATUS.md phase table (check equals full credit; in-progress, drafted, or partial equals half;
+      not-started, blocked, or hold equals zero).
+      <br><br>
+      Those two are independent, so this page compares them every time it is built. The check is not cosmetic: the
+      same percentage is what <code>gld-project-percent-complete</code> writes to the GLD project record, so a stale
+      checklist reports a wrong number upward. It is never auto-corrected, because deciding a phase is done is a
+      claim about the course, not a formatting fix.
+    </div>
+  </section>
+
+  <!-- ==================== VIEW 2: CAPACITY ==================== -->
+  <section class="view" id="view-capacity" role="tabpanel" aria-labelledby="tab-capacity">
+    <div class="view-head">
+      <p class="eyebrow">The deadline</p>
+      <h1>Can 6 courses land by 2026-10-15?</h1>
+      <p>Yes, comfortably, and hours are not the reason it could still go wrong.</p>
+    </div>
+    <div class="verdict " style="margin-bottom:1.5rem"><b>Capacity is not your constraint.</b> 48 to 87 hours of work remain across 6 courses against roughly 256 hours of working-day budget before GA. Even the pessimistic estimate uses about 34% of it. The binding constraint is queue time: about 40 days sit on reviews you do not control.</div>
+    <div class="cap-grid">
+      <div class="panel">
+        <h3>What you are waiting on</h3>
+        <p class="hint">Clocks and decisions that are not yours to close by working harder.</p>
+        <ul class="waiting"><li><span class="wdate dec">now</span><span><b>DEC-002, Reporting And D..</b> Do we keep the full build, or switch to modify-an-existing?</span></li><li><span class="wdate dec">now</span><span><b>DEC-001, Integration Bas..</b> Do we keep this as one nine-lesson course, or split it into two?</span></li><li><span class="wdate ">07-31</span><span><b>platform-fundamentals.</b> QA review target turnaround</span></li><li><span class="wdate ">08-07</span><span><b>workflow-automation.</b> SME feedback window closes</span></li><li><span class="wdate ">10-15</span><span><b>.</b> All six courses live for the Cloud Dimensions launch</span></li><li><span class="wdate ">10-15</span><span><b>GA, courses must be live.</b> </span></li></ul>
+      </div>
+      <div class="panel">
+        <h3>Effort against budget</h3>
+        <p class="hint">Remaining hours per course versus the working-day budget to GA (64 working days at 4 h/day).</p>
+        <div class="bar-row" style="--bc:#8071F2"><div class="bar-lab"><span class="l">Onboarding Essentials</span><span class="v">1-2 h</span></div><div class="bar" role="img" aria-label="Onboarding Essentials: 1-2 hours"><div class="bar-fill" style="width:0.4%"></div><div class="bar-fill range" style="width:0.4%"></div></div></div><div class="bar-row" style="--bc:#63DF4E"><div class="bar-lab"><span class="l">Reporting And Dashboards</span><span class="v">14-24 h</span></div><div class="bar" role="img" aria-label="Reporting And Dashboards: 14-24 hours"><div class="bar-fill" style="width:5.5%"></div><div class="bar-fill range" style="width:3.9%"></div></div></div><div class="bar-row" style="--bc:#FFBC39"><div class="bar-lab"><span class="l">Service Catalog Design</span><span class="v">6-11 h</span></div><div class="bar" role="img" aria-label="Service Catalog Design: 6-11 hours"><div class="bar-fill" style="width:2.3%"></div><div class="bar-fill range" style="width:2.0%"></div></div></div><div class="bar-row" style="--bc:#52B8FF"><div class="bar-lab"><span class="l">Integration Basics</span><span class="v">22-38 h</span></div><div class="bar" role="img" aria-label="Integration Basics: 22-38 hours"><div class="bar-fill" style="width:8.6%"></div><div class="bar-fill range" style="width:6.2%"></div></div></div><div class="bar-row" style="--bc:#00BDF4"><div class="bar-lab"><span class="l">Platform Fundamentals</span><span class="v">2-5 h</span></div><div class="bar" role="img" aria-label="Platform Fundamentals: 2-5 hours"><div class="bar-fill" style="width:0.8%"></div><div class="bar-fill range" style="width:1.2%"></div></div></div><div class="bar-row" style="--bc:#FF53E4"><div class="bar-lab"><span class="l">Workflow Automation</span><span class="v">3-7 h</span></div><div class="bar" role="img" aria-label="Workflow Automation: 3-7 hours"><div class="bar-fill" style="width:1.2%"></div><div class="bar-fill range" style="width:1.6%"></div></div></div>
+        <div class="bar-row" style="--bc:var(--cyan); margin-top:1.2rem; padding-top:.9rem; border-top:1px solid var(--line)">
+          <div class="bar-lab"><span class="l" style="color:var(--ink);font-weight:600">All 6 vs 256 h budget</span><span class="v">48-87 h</span></div>
+          <div class="bar"><div class="bar-fill" style="width:18.8%"></div><div class="bar-fill range" style="width:15.2%"></div></div>
+          <p class="hint" style="margin:.4rem 0 0">Solid fill is the optimistic estimate, hatched is the pessimistic tail. The rest of the bar is slack.</p>
+        </div>
+      </div>
+    </div>
+    <h2 class="sec">Path to GA</h2>
+    <p class="hint" style="margin:-.5rem 0 .7rem; color:var(--ink-dim); font-size:.8rem">Each course's remaining phases, left to right, in the order they happen. Bar length is proportional to that course's own remaining path, not to a shared calendar.</p>
+    <div class="tl-key">
+      <span class="tl-key-i"><i class="sw sw-own"></i><span><b>Your effort</b></span></span>
+      <span class="tl-key-i"><i class="sw sw-ext"></i><span><b>Not your effort</b>, someone else's queue</span></span>
+      
+      <span class="tl-key-i"><i class="sw sw-hue"></i><span>Colour identifies the course, same as the Course tracker cards</span></span>
+    </div>
+    <div class="panel">
+      <div class="tl"><div class="tl-row"><span class="tl-name" style="color:#8071F2">Onboarding Esse.</span><div class="tl-track"><div class="tl-seg own" style="left:0.0%;width:100.0%;background:#8071F2" title="Publish to the LXP">Publish to the LXP</div></div></div><div class="tl-row"><span class="tl-name" style="color:#63DF4E">Reporting And D.</span><div class="tl-track"><div class="tl-seg own" style="left:0.0%;width:37.5%;background:#63DF4E" title="Lab screenshots">Lab screenshots</div><div class="tl-seg own" style="left:37.5%;width:25.0%;background:#63DF4E" title="Visual assets">Visual assets</div><div class="tl-seg own" style="left:62.5%;width:25.0%;background:#63DF4E" title="Rise build">Rise build</div><div class="tl-seg own" style="left:87.5%;width:12.5%;background:#63DF4E" title="QA chain">QA chain</div></div></div><div class="tl-row"><span class="tl-name" style="color:#FFBC39">Service Catalog.</span><div class="tl-track"><div class="tl-seg own" style="left:0.0%;width:14.3%;background:#FFBC39" title="Finish QA chain">Finish QA chain</div><div class="tl-seg own" style="left:14.3%;width:7.1%;background:#FFBC39" title="Alpha review"></div><div class="tl-seg ext" style="left:21.4%;width:71.4%" title="SME review">SME review</div><div class="tl-seg own" style="left:92.9%;width:7.1%;background:#FFBC39" title="Branding and publish"></div></div></div><div class="tl-row"><span class="tl-name" style="color:#52B8FF">Integration Bas.</span><div class="tl-track"><div class="tl-seg own" style="left:0.0%;width:14.3%;background:#52B8FF" title="Outline and plan">Outline and plan</div><div class="tl-seg own" style="left:14.3%;width:28.6%;background:#52B8FF" title="Lesson and lab specs">Lesson and lab specs</div><div class="tl-seg ext" style="left:42.9%;width:28.6%" title="Cloud Labs instance">Cloud Labs instance</div><div class="tl-seg own" style="left:71.4%;width:28.6%;background:#52B8FF" title="Rise build">Rise build</div></div></div><div class="tl-row"><span class="tl-name" style="color:#00BDF4">Platform Fundam.</span><div class="tl-track"><div class="tl-seg ext" style="left:0.0%;width:52.4%" title="waiting until 2026-07-31">waiting until 2026-07-31</div><div class="tl-seg ext" style="left:52.4%;width:38.1%" title="Formal QA review">Formal QA review</div><div class="tl-seg own" style="left:90.5%;width:4.8%;background:#00BDF4" title="Resolve QA findings"></div><div class="tl-seg own" style="left:95.2%;width:4.8%;background:#00BDF4" title="Publish to the LXP"></div></div></div><div class="tl-row"><span class="tl-name" style="color:#FF53E4">Workflow Automa.</span><div class="tl-track"><div class="tl-seg ext" style="left:0.0%;width:46.2%" title="waiting until 2026-08-07">waiting until 2026-08-07</div><div class="tl-seg ext" style="left:46.2%;width:25.6%" title="SME review window">SME review window</div><div class="tl-seg own" style="left:71.8%;width:5.1%;background:#FF53E4" title="Triage and apply feedback"></div><div class="tl-seg own" style="left:76.9%;width:2.6%;background:#FF53E4" title="Branding pass"></div><div class="tl-seg ext" style="left:79.5%;width:20.5%" title="Formal QA review">Formal QA review</div></div></div></div>
+      <div class="tl-scale"><span>now</span><span style="text-align:center">&nbsp;</span><span>GA 2026-10-15</span></div>
+    </div>
+    <div class="footnote">
+      Budget math: <code>daily_budget_hours: 4</code> from <code>COMMAND-CENTER.md</code>, times
+      64 working days to 2026-10-15, equals roughly 256 hours. Timeline bars show sequence
+      and composition, not start dates: nothing here predicts which day a phase begins.
+    </div>
+  </section>
+
+  <!-- ==================== VIEW 3: PROCESS MAP ==================== -->
+  <section class="view" id="view-process" role="tabpanel" aria-labelledby="tab-process">
+    <div class="view-head">
+      <p class="eyebrow">The pipeline</p>
+      <h1>Every phase from assignment to published course</h1>
+      <p>17 phases, grouped into stages. Every phase ends in a human approval gate: the AI drafts, you decide, nothing self-advances. The phases that run on someone else's clock are the ones that set your real deadline.</p>
+    </div>
+    <div class="legend">
+      <span class="legend-i"><span class="tag tag-human" style="margin:0">Human</span> your judgment or your hands, not automatable</span>
+      <span class="legend-i"><span class="tag tag-ext" style="margin:0">External</span> waits on a queue you do not control</span>
+      <span class="legend-i">Click any phase for its skills, gate, and track notes</span>
+    </div>
+<div class="band" style="--bandc:#5D7CA6"><div class="band-head"><span class="band-dot"></span><span class="band-name">Stage 1 &middot; Triage</span><span class="band-meta">1 phase</span></div><div class="nodes"><details class="node"><summary class="node-top"><span class="node-id">0</span><span class="node-name">Assignment triage</span><span class="tag tag-human">Human</span><span class="chev" aria-hidden="true">+</span></summary><div class="node-body"><div class="node-skill">Human judgment call, no workspace skill yet</div><div class="node-gate"><b>Gate:</b> Track (A or B) and sub-type decided</div><div class="node-note">Existing course: family/release update (new release of a course already in the catalog) or other required update (correction, gap-fill, non-release-driven change) → Track B. New product course: no prior version exists → Track A</div></div></details></div></div><div class="band" style="--bandc:#3C8FD0"><div class="band-head"><span class="band-dot"></span><span class="band-name">Stage 2 &middot; Plan</span><span class="band-meta">4 phases &middot; 1 to 4</span></div><div class="nodes"><details class="node"><summary class="node-top"><span class="node-id">1</span><span class="node-name">Documentation gathering</span><span class="chev" aria-hidden="true">+</span></summary><div class="node-body"><div class="skills"><details class="skill"><summary class="skill-n">export-docs<span class="skill-cat">pipeline</span><span class="skill-chev" aria-hidden="true">+</span></summary><div class="skill-d"><p>Detects raw ServiceNow KB JSON exports and transforms them into clean, minimal _volume0.json files ready for Claude to read as course source data. Use when a JSON file in source-data contains short_description, u_external_url, and text (HTML) fields, or when asked to &quot;export-docs,&quot; &quot;transform KB JSON,&quot; &quot;clean source JSON,&quot; or produce a &quot;volume0&quot; file. Run before reading any raw source JSON file.</p><code>.claude/skills/export-docs/SKILL.md</code></div></details><details class="skill"><summary class="skill-n">find-hidden-urls<span class="skill-cat">quality</span><span class="skill-chev" aria-hidden="true">+</span></summary><div class="skill-d"><p>Extracts direct, bookmarkable URLs from JavaScript single-page applications (SPAs) where clicking a link does not change the visible address bar. Covers ServiceNow KB categories, SNU LXP course items, and generic SPAs. Use when a user pastes a URL and asks for a direct link to a specific item inside it, or says &quot;find the direct URL,&quot; &quot;hidden URL,&quot; or &quot;extract URL from.&quot;</p><code>.claude/skills/find-hidden-urls/SKILL.md</code></div></details></div><div class="node-gate"><b>Gate:</b> Source inventory complete</div><div class="node-note">B also exports the existing course (XLF + PDF from Rise)</div></div></details><details class="node"><summary class="node-top"><span class="node-id">2</span><span class="node-name">Blueprint / PRD</span><span class="chev" aria-hidden="true">+</span></summary><div class="node-body"><div class="skills"><details class="skill"><summary class="skill-n">write-a-prd<span class="skill-cat">pipeline</span><span class="skill-chev" aria-hidden="true">+</span></summary><div class="skill-d"><p>Create a course PRD through user interview, repo exploration, and module design, then write a PRD.md file to the course folder. Use when the user wants to write a PRD, create a product requirements document, or plan a new course or feature before building it.</p><code>.claude/skills/write-a-prd/SKILL.md</code></div></details><details class="skill"><summary class="skill-n">new-course-setup<span class="skill-cat">pipeline</span><span class="skill-chev" aria-hidden="true">+</span></summary><div class="skill-d"><p>Sets up a complete Rise course project directory, directory structure, CLAUDE.md, skill references, templates, source-data specs, and action-items scaffolding. Use when starting a brand-new ServiceNow e-learning course project or standing up the project folder for an existing course&#x27;s new release. Starts with AskUserQuestion to gather course metadata before creating anything.</p><code>.claude/skills/new-course-setup/SKILL.md</code></div></details></div><div class="node-gate"><b>Gate:</b> PRD + track approved</div><div class="node-note">B reuses the existing PRD, updates the release field. GLD intake (`create-pvr`) runs right after this gate - project, LPD, and PVR creation, for a new course or new release version</div></div></details><details class="node"><summary class="node-top"><span class="node-id">3</span><span class="node-name">Improvement analysis + scenario</span><span class="chev" aria-hidden="true">+</span></summary><div class="node-body"><div class="skills"><details class="skill"><summary class="skill-n">rise-lesson-spec-authoring-workflow<span class="skill-cat">pipeline</span><span class="skill-chev" aria-hidden="true">+</span></summary><div class="skill-d"><p>End-to-end agentic workflow for producing polished, QA-cleared Rise lesson specs from product documentation and existing course material. Use when starting a new Rise course, updating an existing course for a new ServiceNow release, or improving existing course content. Covers 8 phases: course intake, source gathering, improvement analysis, design, planning, spec authoring, visual assets, and QA.</p><code>.claude/skills/rise-lesson-spec-authoring-workflow/SKILL.md</code></div></details><details class="skill"><summary class="skill-n">superpowers:brainstorming<span class="skill-cat">plugin</span><span class="skill-chev" aria-hidden="true">+</span></summary><div class="skill-d"><p>Provided by the superpowers plugin, not a workspace skill.</p><code>superpowers plugin</code></div></details></div><div class="node-gate"><b>Gate:</b> Improvements + scenario approved</div><div class="node-note">A uses a 5-category rubric. B uses a three-tier change list: Must Update / Recommended / Optional</div></div></details><details class="node"><summary class="node-top"><span class="node-id">4</span><span class="node-name">Outline + implementation plan</span><span class="chev" aria-hidden="true">+</span></summary><div class="node-body"><div class="skills"><details class="skill"><summary class="skill-n">superpowers:writing-plans<span class="skill-cat">plugin</span><span class="skill-chev" aria-hidden="true">+</span></summary><div class="skill-d"><p>Provided by the superpowers plugin, not a workspace skill.</p><code>superpowers plugin</code></div></details></div><div class="node-gate"><b>Gate:</b> Plan approved</div><div class="node-note">B plans only the changed lessons</div></div></details></div></div><div class="band" style="--bandc:#00BDF4"><div class="band-head"><span class="band-dot"></span><span class="band-name">Stage 3 &middot; Build</span><span class="band-meta">6 phases &middot; 5 to 10</span></div><div class="nodes"><details class="node"><summary class="node-top"><span class="node-id">5</span><span class="node-name">Lesson specs</span><span class="chev" aria-hidden="true">+</span></summary><div class="node-body"><div class="skills"><details class="skill"><summary class="skill-n">rise-course-development<span class="skill-cat">rise</span><span class="skill-chev" aria-hidden="true">+</span></summary><div class="skill-d"><p>End-to-end workflow for developing ServiceNow e-learning courses in Articulate Rise, spec authoring, block conventions, image extraction, lab structure, and file organization. Use when authoring, reviewing, or auditing a Rise lesson or lab spec, selecting a Rise block type, or setting up a course&#x27;s output folder structure.</p><code>.claude/skills/rise-course-development/SKILL.md</code></div></details><details class="skill"><summary class="skill-n">superpowers:subagent-driven-development<span class="skill-cat">plugin</span><span class="skill-chev" aria-hidden="true">+</span></summary><div class="skill-d"><p>Provided by the superpowers plugin, not a workspace skill.</p><code>superpowers plugin</code></div></details></div><div class="node-gate"><b>Gate:</b> Specs reviewed</div><div class="node-note">B edits affected specs in place</div></div></details><details class="node"><summary class="node-top"><span class="node-id">6</span><span class="node-name">Lab specs</span><span class="chev" aria-hidden="true">+</span></summary><div class="node-body"><div class="skills"><details class="skill"><summary class="skill-n">lab-spec-checker<span class="skill-cat">labs</span><span class="skill-chev" aria-hidden="true">+</span></summary><div class="skill-d"><p>Audits Rise lab spec Markdown files for a course against the canonical lab pattern - Process blocks for procedures, screenshot placeholders on every step, YAML and pipe tables in Custom Code HTML blocks, new-tab navigation disclosures, and all required DDC Header structure. Also recognizes the developer-lab variants: copyable code panels for developer-audience external-tool arcs (rule 2a) and, for CICD only, HTML step-cards that replace Process blocks (rule 2b). Use when asked to check, audit, or review lab specs before a Rise build, or when a lab spec was just written or imported and needs verification before queuing for build.</p><code>.claude/skills/lab-spec-checker/SKILL.md</code></div></details></div><div class="node-gate"><b>Gate:</b> Lab specs reviewed</div><div class="node-note">B touches only changed labs</div></div></details><details class="node"><summary class="node-top"><span class="node-id">7</span><span class="node-name">ICE package + Cloud Labs instance</span><span class="chev" aria-hidden="true">+</span></summary><div class="node-body"><div class="skills"><details class="skill"><summary class="skill-n">ice-and-clabs<span class="skill-cat">labs</span><span class="skill-chev" aria-hidden="true">+</span></summary><div class="skill-d"><p>Analyzes a course&#x27;s source-data folder and output lesson specs to identify every ICE (Instance Configuration Engine) component needed to support a Cloud Labs lab instance, then generates a self-contained branded HTML instruction guide. Use when a course has source data and lesson specs and needs an ICE package built or documented, when a team member asks what an ICE package needs for a course, or when an existing course is updated and its ICE package needs review against new content.</p><code>.claude/skills/ice-and-clabs/SKILL.md</code></div></details><details class="skill"><summary class="skill-n">clabs-provision-instance<span class="skill-cat">labs</span><span class="skill-chev" aria-hidden="true">+</span></summary><div class="skill-d"><p>Provisions a fresh Cloud Labs instance (student plus a non-hibernating instructor instance) from an ICE package through the shared &quot;Get Development Instances&quot; catalog item at clabs.service-now.com. Drives the form with Playwright MCP, marks an instructor instance, renames the Lab Collection, and can file a favorite. Use when asked to provision, spin up, or create a Cloud Labs instance, or &quot;get development instances,&quot; for a course with a certified ICE package.</p><code>.claude/skills/clabs-provision-instance/SKILL.md</code></div></details></div><div class="node-gate"><b>Gate:</b> Instance provisioned + verified</div><div class="node-note">B often just re-seeds an existing package</div></div></details><details class="node"><summary class="node-top"><span class="node-id">8</span><span class="node-name">CLabs step testing + screenshots</span><span class="chev" aria-hidden="true">+</span></summary><div class="node-body"><div class="skills"><details class="skill"><summary class="skill-n">lab-screenshot-capture<span class="skill-cat">labs</span><span class="skill-chev" aria-hidden="true">+</span></summary><div class="skill-d"><p>Plans and automates locator-style screenshot capture for Rise demo lab Process blocks - the test-lab-steps.md planning doc, capture script structure, viewport settings, scroll-before-capture, iframe navigation patterns, annotation, and discrepancy handling. Use when a lab spec has Process block steps with screenshot placeholders and a capture_labN_locator.py script needs to be written or adapted.</p><code>.claude/skills/lab-screenshot-capture/SKILL.md</code></div></details><details class="skill"><summary class="skill-n">cloud-labs-screenshots<span class="skill-cat">labs</span><span class="skill-chev" aria-hidden="true">+</span></summary><div class="skill-d"><p>Captures real screenshots from a ServiceNow Cloud Labs instance and replaces HTML mockup blocks in Rise with them, for standalone Image blocks (not lab Process block steps). Covers Playwright capture scripts, inserting image blocks via the Rise editor, uploading files, and editing HTML mockup annotation blocks to retain educational content after replacement. Use when a Rise lesson spec has an Image block still holding an HTML mockup placeholder that needs a real screenshot.</p><code>.claude/skills/cloud-labs-screenshots/SKILL.md</code></div></details><details class="skill"><summary class="skill-n">cloud-labs-to-rise<span class="skill-cat">rise</span><span class="skill-chev" aria-hidden="true">+</span></summary><div class="skill-d"><p>End-to-end pipeline for replacing HTML mockup PNGs in Rise process blocks with real screenshots captured from a live ServiceNow Cloud Labs instance. Covers Playwright login, classic-UI iframe access, Next Experience shadow-DOM piercing, screenshot capture and crop, discrepancy logging against the lesson spec, and targeted Rise mockup replacement via delete-tail plus skip-blocks rebuild. Use when a lesson spec has Process blocks still showing placeholder mockups and a live Cloud Labs instance is available to capture the real UI.</p><code>.claude/skills/cloud-labs-to-rise/SKILL.md</code></div></details></div><div class="node-gate"><b>Gate:</b> Screenshots placed</div><div class="node-note">B recaptures only changed screens</div></div></details><details class="node"><summary class="node-top"><span class="node-id">9</span><span class="node-name">Visual assets / HTML tables</span><span class="chev" aria-hidden="true">+</span></summary><div class="node-body"><div class="skills"><details class="skill"><summary class="skill-n">html-tables<span class="skill-cat">rise</span><span class="skill-chev" aria-hidden="true">+</span></summary><div class="skill-d"><p>Create semantic, styled HTML tables for Rise modules using structured data sources (markdown tables, spreadsheets, or conceptual outlines). Use when a lesson needs a comparison matrix, glossary, form-field reference, or scenario table uploaded to Rise as a Custom Code block.</p><code>.claude/skills/html-tables/SKILL.md</code></div></details><details class="skill"><summary class="skill-n">color-html-block<span class="skill-cat">rise</span><span class="skill-chev" aria-hidden="true">+</span></summary><div class="skill-d"><p>Set, update, or insert the background color of a Rise HTML custom-code block (tables, diagrams, flowcharts, timelines, checklists) via the Ace editor and Playwright, including mid-lesson insertion and bulk recoloring across a course. Use when a lesson&#x27;s HTML block needs a background color change, a mid-lesson position insert, or an existing block&#x27;s HTML content updated in place.</p><code>.claude/skills/color-html-block/SKILL.md</code></div></details></div><div class="node-gate"><b>Gate:</b> Tables render</div><div class="node-note">B adds/edits only changed assets</div></div></details><details class="node"><summary class="node-top"><span class="node-id">10</span><span class="node-name">Rise build</span><span class="chev" aria-hidden="true">+</span></summary><div class="node-body"><div class="skills"><details class="skill"><summary class="skill-n">rise-build<span class="skill-cat">command</span><span class="skill-chev" aria-hidden="true">+</span></summary><div class="skill-d"><p>Wraps the rise-lesson-builder skill (command name kept short intentionally). Automate building a Rise 360 course (or specific lessons) from lesson spec .md files using the rise_lesson_builder.py Playwright tool.</p><code>.claude/commands/rise-build.md</code></div></details><details class="skill"><summary class="skill-n">rise-lesson-builder<span class="skill-cat">rise</span><span class="skill-chev" aria-hidden="true">+</span></summary><div class="skill-d"><p>Operate automation/rise_lesson_builder.py to build Rise 360 lessons block-by-block from lesson spec .md files over a persistent Chrome DevTools Protocol (CDP) session. Use when constructing, resuming, or targeted-editing a Rise lesson from a spec file; when a dry-run, build, or resume command is needed; when a process block, flashcard, knowledge check, or image block is not building correctly; or when diagnosing a Rise DOM/Playwright selector failure during a build.</p><code>.claude/skills/rise-lesson-builder/SKILL.md</code></div></details></div><div class="node-gate"><b>Gate:</b> Lesson built</div><div class="node-note">B = targeted block edits, never a full `--clear`</div></div></details></div></div><div class="band" style="--bandc:#8071F2"><div class="band-head"><span class="band-dot"></span><span class="band-name">Stage 4 &middot; Review</span><span class="band-meta">5 phases &middot; 11 to 14.5</span></div><div class="nodes"><details class="node"><summary class="node-top"><span class="node-id">11</span><span class="node-name">QA, alt text, borders, links</span><span class="chev" aria-hidden="true">+</span></summary><div class="node-body"><div class="skills"><details class="skill"><summary class="skill-n">snu-course-qa-checker<span class="skill-cat">quality</span><span class="skill-chev" aria-hidden="true">+</span></summary><div class="skill-d"><p>Runs a pre-submission QA and accessibility self-check of ServiceNow University course content against the 171+ item SNU/GLD QA checklist, the GLD Style Guide Addendum, and WCAG 2.1 AA. Use before submitting any course for review, when a curriculum developer uploads a course file and asks for a review, self-check, pre-QA, or accessibility check, or asks &quot;does this meet WCAG.&quot; Accepts PDF, PPTX, DOCX, XLIFF, or images; also runs directly against unpublished Markdown lesson specs when no export exists yet.</p><code>.claude/skills/snu-course-qa-checker/SKILL.md</code></div></details><details class="skill"><summary class="skill-n">alt-text-image-checker<span class="skill-cat">quality</span><span class="skill-chev" aria-hidden="true">+</span></summary><div class="skill-d"><p>Audits every image in a published Articulate Rise course for alt text completeness and quality, producing a full markdown inventory grouped by lesson with a suggested alt text for every missing or vague image. Use when a curriculum developer wants to check image accessibility before QA submission, run a WCAG 2.2 SC 1.1.1/2.4.4 pass, or spot-check newly added images after editing a course. Triggering phrases: &quot;check alt text,&quot; &quot;audit image accessibility,&quot; &quot;does every image have alt text,&quot; &quot;accessibility review before QA.&quot; Not for applying fixes automatically inside the live Rise editor; see the related skills below for that.</p><code>.claude/skills/alt-text-image-checker/SKILL.md</code></div></details><details class="skill"><summary class="skill-n">add-image-border<span class="skill-cat">quality</span><span class="skill-chev" aria-hidden="true">+</span></summary><div class="skill-d"><p>Adds a 10px rounded SNU brand-color border to every image in a folder, saves each as a transparent-corner PNG (or animated/static GIF where appropriate), and generates a Markdown and HTML alt text report with visual previews for the bordered set. Use when preparing screenshots for a new lesson, re-branding an existing image set to SNU style, or applying the rounded-corner colored-border treatment from the SNU course template to a batch of images. Triggering phrases: &quot;border these screenshots,&quot; &quot;apply SNU colors to these images,&quot; &quot;brand these screenshots for the course.&quot;</p><code>.claude/skills/add-image-border/SKILL.md</code></div></details><details class="skill"><summary class="skill-n">link-checker<span class="skill-cat">quality</span><span class="skill-chev" aria-hidden="true">+</span></summary><div class="skill-d"><p>Extracts and tests every hyperlink in an XLIFF course file or a published Rise course folder/ZIP, cross-checks learning.servicenow.com links against a known-bad-links database, and produces a markdown report categorized by status (OK, redirected, broken, timeout, sunsetting/retired). Use before a course submission or publish, after any live Rise text/button link edit, or for periodic link-rot maintenance. Triggering phrases: &quot;check the links,&quot; &quot;are any links broken,&quot; &quot;verify hyperlinks before QA,&quot; &quot;did that button link actually save.&quot; Not for finding URLs hidden in non-link text or QR codes; use `find-hidden-urls` for that.</p><code>.claude/skills/link-checker/SKILL.md</code></div></details></div><div class="node-gate"><b>Gate:</b> QA clean</div><div class="node-note">Same. GLD deployment record (`content-deployment-request`, PVR Step 6) runs right after this gate</div></div></details><details class="node"><summary class="node-top"><span class="node-id">12</span><span class="node-name">Alpha review</span><span class="chev" aria-hidden="true">+</span></summary><div class="node-body"><div class="skills"><details class="skill"><summary class="skill-n">snu-ai-alpha<span class="skill-cat">rise</span><span class="skill-chev" aria-hidden="true">+</span></summary><div class="skill-d"><p>Simulates the SNU AI Alpha Focus Group, 10 distinct reviewer personas (4 TCD, 4 SME, 2 IEE) who evaluate submitted course content and produce a consolidated feedback report with per-section assessments, timing estimates, persona callouts, style flags, cross-cutting themes, and prioritized action items. Outputs both a Markdown report and a self-contained interactive HTML report. Use when a course draft is ready for a formative instructional-design review, before scheduling a live Alpha class, or on any mention of &quot;alpha review&quot;, &quot;AI alpha&quot;, &quot;run alpha&quot;, &quot;run an alpha&quot;, or &quot;SNU alpha&quot;.</p><code>.claude/skills/snu-ai-alpha/SKILL.md</code></div></details></div><div class="node-gate"><b>Gate:</b> Every flag triaged</div><div class="node-note">Same</div></div></details><details class="node"><summary class="node-top"><span class="node-id">13</span><span class="node-name">SME review</span><span class="tag tag-ext">External</span><span class="chev" aria-hidden="true">+</span></summary><div class="node-body"><div class="node-skill">Rise Review (human process, no skill)</div><div class="node-gate"><b>Gate:</b> Feedback resolved in Rise AND source specs, then re-verify alt text + links</div><div class="node-note">Same</div></div></details><details class="node"><summary class="node-top"><span class="node-id">14</span><span class="node-name">Branding</span><span class="chev" aria-hidden="true">+</span></summary><div class="node-body"><div class="skills"><details class="skill"><summary class="skill-n">restyle-rise-scorm<span class="skill-cat">rise</span><span class="skill-chev" aria-hidden="true">+</span></summary><div class="skill-d"><p>Applies SNU brand styling (Infinite Blue background, Wasabi Green accents, ServiceNow Sans fonts) to a published Articulate Rise SCORM 1.2 or xAPI ZIP package by modifying the course theme data, replacing font files, and injecting CSS overrides. Use when a team member has an exported Rise SCORM/xAPI ZIP that needs SNU brand styling applied before delivery.</p><code>.claude/skills/restyle-rise-scorm/SKILL.md</code></div></details></div><div class="node-gate"><b>Gate:</b> Human runs the extension; verify in Rise preview</div><div class="node-note">Same</div></div></details><details class="node"><summary class="node-top"><span class="node-id">14.5</span><span class="node-name">Formal SNU QA review</span><span class="tag tag-ext">External</span><span class="chev" aria-hidden="true">+</span></summary><div class="node-body"><div class="skills"><div class="skill"><div class="skill-n" style="cursor:default"><span>automation/submit_phase145_qa_review.py</span><span class="skill-cat skill-cat-missing">not installed</span></div></div></div><div class="node-gate"><b>Gate:</b> Every QA Review Finding resolved before export</div><div class="node-note">Same</div></div></details></div></div><div class="band" style="--bandc:#63DF4E"><div class="band-head"><span class="band-dot"></span><span class="band-name">Stage 5 &middot; Publish</span><span class="band-meta">1 phase</span></div><div class="nodes"><details class="node"><summary class="node-top"><span class="node-id">15</span><span class="node-name">Export + publish to SNU</span><span class="chev" aria-hidden="true">+</span></summary><div class="node-body"><div class="skills"><details class="skill"><summary class="skill-n">publish-to-snu<span class="skill-cat">rise</span><span class="skill-chev" aria-hidden="true">+</span></summary><div class="skill-d"><p>Publishes a finished Rise 360 course to ServiceNow University (learning.servicenow.com). Checks export freshness, applies SNU restyling if missing, uploads the package via the Table/Attachment API, stops at a human-gated pre-publish confirmation, and records the Now Learning front-end/back-end URLs in the course&#x27;s links.md. Covers self-paced on-demand courses only, no ILT, no ebooks. Use when a Rise course is QA-complete, branded, and ready to go live on ServiceNow University.</p><code>.claude/skills/publish-to-snu/SKILL.md</code></div></details></div><div class="node-gate"><b>Gate:</b> Package renders and tracks completion in SNU</div><div class="node-note">Same</div></div></details></div></div>
+    <div class="footnote">
+      Source of truth: <code>docs/DDC-e2e-summary.md</code> section 2, which itself tracks GLD article
+      <code>KB0020813</code> "Source of Truth: How To Create An On Demand Course". Every phase id, name, skill, gate,
+      and track note on this page is parsed from that one table, and each skill's description is read from its own
+      SKILL.md, so neither can drift from the source.
+    </div>
+  </section>
+
+</main>
+
+<script>
+  // ---- station rails -------------------------------------------------------
+  // 17 stations, in pipeline order, matching docs/DDC-e2e-summary.md section 2.
+  var STATIONS = [
+    { id: "0", label: "Assignment triage", stage: "Triage" },
+    { id: "1", label: "Documentation gathering", stage: "Plan" },
+    { id: "2", label: "Blueprint / PRD", stage: "Plan" },
+    { id: "3", label: "Improvement analysis + scenario", stage: "Plan" },
+    { id: "4", label: "Outline + implementation plan", stage: "Plan" },
+    { id: "5", label: "Lesson specs", stage: "Build" },
+    { id: "6", label: "Lab specs", stage: "Build" },
+    { id: "7", label: "ICE package + Cloud Labs instance", stage: "Build" },
+    { id: "8", label: "CLabs step testing + screenshots", stage: "Build" },
+    { id: "9", label: "Visual assets / HTML tables", stage: "Build" },
+    { id: "10", label: "Rise build", stage: "Build" },
+    { id: "11", label: "QA, alt text, borders, links", stage: "Review" },
+    { id: "12", label: "Alpha review", stage: "Review" },
+    { id: "13", label: "SME review", stage: "Review" },
+    { id: "14", label: "Branding", stage: "Review" },
+    { id: "14.5", label: "Formal SNU QA review", stage: "Review" },
+    { id: "15", label: "Export + publish to SNU", stage: "Publish" }
+  ];
+  var EXTERNAL = { "13": true, "14.5": true };
+
+  var tip = document.getElementById("tip");
+
+  function showTip(e, seg) {
+    tip.innerHTML =
+      '<div class="tip-h"><span class="tip-id">' + seg.dataset.id + '</span>' +
+      '<span class="tip-name">' + seg.dataset.label + '</span></div>' +
+      '<div class="tip-m">Stage: ' + seg.dataset.stage + '</div>' +
+      '<div class="tip-s tip-' + seg.dataset.state + '">' + seg.dataset.stateLabel + '</div>';
+    tip.hidden = false;
+    var r = seg.getBoundingClientRect();
+    var t = tip.getBoundingClientRect();
+    var left = r.left + r.width / 2 - t.width / 2;
+    left = Math.max(8, Math.min(left, window.innerWidth - t.width - 8));
+    var top = r.top - t.height - 8;
+    if (top < 8) top = r.bottom + 8; // flip below when it would clip the top
+    tip.style.left = left + "px";
+    tip.style.top = top + "px";
+  }
+  function hideTip() { tip.hidden = true; }
+
+  function buildRail(elId, currentId, courseName) {
+    var el = document.getElementById(elId);
+    if (!el) return;
+    var cur = STATIONS.findIndex(function (s) { return s.id === currentId; });
+    STATIONS.forEach(function (s, i) {
+      var d = document.createElement("div");
+      var cls = "seg";
+      var state, stateLabel;
+      if (i < cur)       { cls += " done"; state = "done"; stateLabel = "Done"; }
+      else if (i === cur) { cls += " now";  state = "now";  stateLabel = "Current phase"; }
+      else                {                 state = "todo"; stateLabel = "Not started"; }
+      if (EXTERNAL[s.id]) {
+        cls += " ext";
+        stateLabel += ", waits on an external queue";
+      }
+      d.className = cls;
+      d.dataset.id = s.id;
+      d.dataset.label = s.label;
+      d.dataset.stage = s.stage;
+      d.dataset.state = state;
+      d.dataset.stateLabel = stateLabel;
+      // role+aria-label rather than title=: a native tooltip would race the
+      // styled one and show both.
+      d.setAttribute("role", "img");
+      d.setAttribute("aria-label",
+        courseName + ", phase " + s.id + " " + s.label + ": " + stateLabel);
+      d.addEventListener("mouseenter", function (e) { showTip(e, d); });
+      d.addEventListener("mouseleave", hideTip);
+      el.appendChild(d);
+    });
+  }
+  window.addEventListener("scroll", hideTip, { passive: true });
+
+  buildRail("rail-onboarding-essentials", "15", "Onboarding Essentials");
+  buildRail("rail-reporting-and-dashboards", "8", "Reporting And Dashboards");
+  buildRail("rail-service-catalog-design", "11", "Service Catalog Design");
+  buildRail("rail-integration-basics", "2", "Integration Basics");
+  buildRail("rail-platform-fundamentals", "14.5", "Platform Fundamentals");
+  buildRail("rail-workflow-automation", "13", "Workflow Automation");
+
+  // ---- live countdown ------------------------------------------------------
+  (function () {
+    var ga = new Date(2026, 9, 15); // GA date, month is 0-indexed. Rewritten per
+                                    // workspace by generate_ddc_dashboard.render().
+                                    // Deliberately no literal date in this comment:
+                                    // the replace swaps the Date() call only, so a
+                                    // dated comment would go stale AND leak the
+                                    // origin workspace's GA date into every build.
+    var now = new Date();
+    var days = Math.max(0, Math.ceil((ga - now) / 86400000));
+    var el = document.getElementById("cd-days");
+    if (el) el.textContent = days;
+  })();
+
+  // ---- view routing --------------------------------------------------------
+  var tabs = document.querySelectorAll('nav.views button');
+  tabs.forEach(function (t) {
+    t.addEventListener("click", function () {
+      tabs.forEach(function (o) { o.setAttribute("aria-selected", "false"); });
+      t.setAttribute("aria-selected", "true");
+      document.querySelectorAll(".view").forEach(function (v) { v.classList.remove("on"); });
+      var target = document.getElementById(t.getAttribute("aria-controls"));
+      if (target) target.classList.add("on");
+      window.scrollTo({ top: 0, behavior: "instant" });
+    });
+  });
+
+  // ---- theme toggle --------------------------------------------------------
+  // Light is the default: an unset data-theme means light, so the first click
+  // always goes to dark. The OS preference is deliberately not consulted.
+  document.getElementById("theme-btn").addEventListener("click", function () {
+    var root = document.documentElement;
+    var cur = root.getAttribute("data-theme") || "light";
+    root.setAttribute("data-theme", cur === "light" ? "dark" : "light");
+  });
+</script>
