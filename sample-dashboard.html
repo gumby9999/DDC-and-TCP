@@ -125,6 +125,15 @@
   .countdown-n { font-size: 1.5rem; font-weight: 700; color: var(--cyan); line-height: 1; }
   .countdown-l { font-size: .72rem; color: var(--ink-dim); line-height: 1.25; }
 
+  .ga-summary {
+    padding: .55rem var(--pad);
+    background: color-mix(in srgb, var(--ok) 10%, var(--surface));
+    border-bottom: 1px solid var(--line);
+    font-size: .8rem; line-height: 1.5;
+  }
+  .ga-summary-line { color: var(--ink-mid); }
+  .ga-summary-line strong { color: var(--ink); }
+
   nav.views { display: flex; gap: .25rem; background: var(--surface); border: 1px solid var(--line); border-radius: 9px; padding: .25rem; }
   nav.views button {
     font: inherit; font-size: .84rem; font-weight: 600;
@@ -589,6 +598,11 @@
     <button class="theme-btn" id="theme-btn" aria-label="Toggle light and dark theme">Theme</button>
   </div>
 </header>
+
+<div class="ga-summary">
+  <div class="ga-summary-line"><strong>2 of 6 courses</strong> have zero remaining dependency - just a Published click, whenever the course owner chooses. Waiting on: Cloud Dimensions Reporting And Dashboards, Cloud Dimensions Integration Basics, Cloud Dimensions Platform Fundamentals, Cloud Dimensions Workflow Automation.</div>
+  <div class="ga-summary-line">Total: <strong>6 Published clicks</strong> across all courses. No CDR needed for any course.</div>
+</div>
 
 <main>
 
