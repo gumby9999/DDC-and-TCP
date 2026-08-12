@@ -144,6 +144,14 @@
   nav.views button:hover { color: var(--ink); background: var(--surface-2); }
   nav.views button[aria-selected="true"] { background: var(--cyan); color: var(--ground); }
   nav.views button[aria-selected="true"] { color: var(--ground); }
+  nav.views a.ext-link {
+    font: inherit; font-size: .84rem; font-weight: 600;
+    color: var(--ink-mid); background: none; border: 0;
+    padding: .4rem .85rem; border-radius: 6px; cursor: pointer;
+    text-decoration: none; display: inline-flex; align-items: center;
+    transition: background .15s, color .15s;
+  }
+  nav.views a.ext-link:hover { color: var(--ink); background: var(--surface-2); }
 
   .theme-btn {
     font: inherit; font-size: .78rem; color: var(--ink-mid);
@@ -593,7 +601,7 @@
     </div>
     <div class="countdown"><span class="countdown-n num" id="cd-days">65</span><span class="countdown-l">days to GA<br>2026-10-15</span></div>
     <nav class="views" role="tablist" aria-label="Dashboard views">
-      <button role="tab" aria-selected="true" aria-controls="view-courses" id="tab-courses">Course tracker</button><button role="tab" aria-selected="false" aria-controls="view-capacity" id="tab-capacity">Capacity</button><button role="tab" aria-selected="false" aria-controls="view-process" id="tab-process">Process map</button>
+      <button role="tab" aria-selected="true" aria-controls="view-courses" id="tab-courses">Course tracker</button><button role="tab" aria-selected="false" aria-controls="view-capacity" id="tab-capacity">Capacity</button><button role="tab" aria-selected="false" aria-controls="view-process" id="tab-process">Process map</button><button role="tab" aria-selected="false" aria-controls="view-intake" id="tab-intake">Intake</button>
     </nav>
     <button class="theme-btn" id="theme-btn" aria-label="Toggle light and dark theme">Theme</button>
   </div>
@@ -837,6 +845,18 @@
       and track note on this page is parsed from that one table, and each skill's description is read from its own
       SKILL.md, so neither can drift from the source.
     </div>
+  </section>
+
+  <!-- ==================== VIEW 4: INTAKE ==================== -->
+  <section class="view" id="view-intake" role="tabpanel" aria-labelledby="tab-intake">
+    <div class="view-head">
+      <p class="eyebrow">Phase 0 - Assignment triage</p>
+      <h1>Teams and Outlook intake</h1>
+      <p>The Phase 0 triage inbox (process changes, PVR/CDR rules, Cloud Labs, QA, AI tooling policy) built by the
+      <code>intake-triage</code> skill, embedded live from <code>dist/intake-triage-latest.html</code>. Search and filter inside
+      the panel below the same way you would on its own page.</p>
+    </div>
+    <div class="footnote">No intake dashboard found yet at <code>dist/intake-triage-latest.html</code>. Run <code>python3 tools/scripts/generate_intake_dashboards.py</code> to build it, then regenerate this page.</div>
   </section>
 
 </main>
